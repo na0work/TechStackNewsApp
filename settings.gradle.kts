@@ -22,3 +22,5 @@ dependencyResolutionManagement {
 rootProject.name = "TechStackNewsApp"
 include(":app")
 include(":newsapi")
+include(":database")
+include(":features:news-main")
