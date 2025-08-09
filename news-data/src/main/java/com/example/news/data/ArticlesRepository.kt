@@ -7,7 +7,9 @@ import com.example.newsapi.NewsApi
 import com.example.newsapi.models.ArticleDTO
 import com.example.newsapi.models.ResponseDTO
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -15,16 +17,18 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlin.collections.map
 
-class ArticleRepository(
+class ArticlesRepository(
     private val dataBase: NewsDatabase,
     private val api: NewsApi,
-    private val requestResponseMergeStrategy: RequestResponseMergeStrategy<List<Article>>,
 ) {
-    fun getAll(): Flow<RequestResult<List<Article>>> {
+    fun getAll(
+        mergeStrategy: MergeStrategy<RequestResult<List<Article>>>
+        = RequestResponseMergeStrategy()
+    ): Flow<RequestResult<List<Article>>> {
         val cachedAllArticles: Flow<RequestResult<List<Article>>> = getAllFromDatabase()
             .map { result ->
                 result.map { articleDBOS ->
-                    articleDBOS.map{ it.toArticle()}
+                    articleDBOS.map { it.toArticle() }
                 }
             }
         val remoteArticles = getAllFromServer()
@@ -35,9 +39,16 @@ class ArticleRepository(
             }
 
 
-        return cachedAllArticles.combine(remoteArticles) { dbos, dtos ->
-            requestResponseMergeStrategy.merge(dbos, dtos)
-        }
+        return cachedAllArticles.combine(remoteArticles, mergeStrategy::merge)
+            .flatMapLatest { result ->
+                if (result is RequestResult.Success){
+                    dataBase.articleDao.observeAll()
+                        .map { it.map { it.toArticle() } }
+                        .map { RequestResult.Success(it) }
+                } else {
+                    flowOf(result)
+                }
+            }
     }
 
 
@@ -60,11 +71,10 @@ class ArticleRepository(
     }
 
     private fun getAllFromDatabase(): Flow<RequestResult<List<ArticleDBO>>> {
-        val dataBaseEvent: Flow<RequestResult<List<ArticleDBO>>> = dataBase.articleDao
-            .getAll()
-            .map { RequestResult.Success(it) }
+        val dbRequest  = dataBase.articleDao::getAll.asFlow()
+            .map{ RequestResult.Success(it) }
         val start = flowOf<RequestResult<List<ArticleDBO>>>(RequestResult.InProgress())
-        return merge(dataBaseEvent, start)
+        return merge(start, dbRequest)
     }
 
     suspend fun search(query: String): Flow<Article> {
