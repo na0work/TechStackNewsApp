@@ -2,6 +2,7 @@ package com.example.news.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.news.data.ArticlesRepository
 import com.example.news.data.RequestResult
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.stateIn
 
 internal class NewsMainViewModel(
     private val getAllArticlesUseCase: GetAllArticlesUseCase,
+    private val repository: ArticlesRepository,
 ) : ViewModel() {
 
     val state: StateFlow<State> = getAllArticlesUseCase()
@@ -28,7 +30,7 @@ private fun RequestResult<List<Article>>.toState(): State {
 
 sealed class State {
     object None : State()
-    class Loading(val articles: List<Article>?) : State()
-    class Error : State()
+    class Loading(val articles: List<Article>? = null) : State()
+    class Error(val articles: List<Article>? = null) : State()
     class Success(val articles: List<Article>) : State()
 }

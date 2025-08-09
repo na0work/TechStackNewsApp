@@ -26,18 +26,8 @@ class ArticlesRepository(
         = RequestResponseMergeStrategy()
     ): Flow<RequestResult<List<Article>>> {
         val cachedAllArticles: Flow<RequestResult<List<Article>>> = getAllFromDatabase()
-            .map { result ->
-                result.map { articleDBOS ->
-                    articleDBOS.map { it.toArticle() }
-                }
-            }
-        val remoteArticles = getAllFromServer()
-            .map { result ->
-                result.map { response ->
-                    response.articles.map { it.toArticle() }
-                }
-            }
 
+        val remoteArticles = getAllFromServer()
 
         return cachedAllArticles.combine(remoteArticles, mergeStrategy::merge)
             .flatMapLatest { result ->
@@ -52,17 +42,22 @@ class ArticlesRepository(
     }
 
 
-    private fun getAllFromServer(): Flow<RequestResult<ResponseDTO<ArticleDTO>>> {
+    private fun getAllFromServer(): Flow<RequestResult<List<Article>>> {
         val apiRequest = flow { emit(api.everything()) }
             .onEach { result ->
                 if (result.isSuccess) {
-                    saveNetResponseToCache(checkNotNull(result.getOrThrow()).articles)
+                    saveNetResponseToCache(result.getOrThrow().articles)
                 }
             }.map { it.toRequestResult() }
 
         val start = flowOf<RequestResult<ResponseDTO<ArticleDTO>>>(RequestResult.InProgress())
 
         return merge(apiRequest, start)
+            .map { result ->
+                result.map { response ->
+                    response.articles.map { it.toArticle() }
+                }
+            }
     }
 
     private suspend fun saveNetResponseToCache(data: List<ArticleDTO>) {
@@ -70,11 +65,16 @@ class ArticlesRepository(
         dataBase.articleDao.insert(dbos)
     }
 
-    private fun getAllFromDatabase(): Flow<RequestResult<List<ArticleDBO>>> {
+    private fun getAllFromDatabase(): Flow<RequestResult<List<Article>>> {
         val dbRequest  = dataBase.articleDao::getAll.asFlow()
             .map{ RequestResult.Success(it) }
         val start = flowOf<RequestResult<List<ArticleDBO>>>(RequestResult.InProgress())
         return merge(start, dbRequest)
+            .map { result ->
+                result.map { articleDBOS ->
+                    articleDBOS.map { it.toArticle() }
+                }
+            }
     }
 
     suspend fun search(query: String): Flow<Article> {
