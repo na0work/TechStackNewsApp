@@ -5,9 +5,11 @@ import com.example.news.data.RequestResult
 import com.example.news.data.map
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import javax.inject.Inject
 import com.example.news.data.models.Article as DataArticle
 
-class GetAllArticlesUseCase(private val repository: ArticlesRepository) {
+class GetAllArticlesUseCase @Inject constructor(
+    private val repository: ArticlesRepository) {
     operator fun invoke(): Flow<RequestResult<List<Article>>> {
         return repository.getAll()
             .map { requestResult ->
